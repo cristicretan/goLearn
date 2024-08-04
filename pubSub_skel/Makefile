@@ -23,7 +23,10 @@ clean:
 
 # Run tests
 test:
-	$(GO) test $(TEST_DIR) -v | tee $(TEST_OUTPUT)
+	$(GO) test $(TEST_DIR)broker_test.go -v | tee $(TEST_OUTPUT)
+
+test-produce-consume:
+	$(GO) test $(TEST_DIR)broker_test.go -v -run ^TestProduceConsume$ | tee $(TEST_OUTPUT)
 
 # Lint the code
 lint:

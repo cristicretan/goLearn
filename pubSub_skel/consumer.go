@@ -1,28 +1,21 @@
-/*
-* @Author: Cristi Cretan
-* @Date:   2024-08-03 19:19:34
-* @Last Modified by:   Cristi Cretan
-* @Last Modified time: 2024-08-03 19:19:47
-*/
 package main
-
-import (
-    // Import necessary packages
-)
 
 // Consumer represents a message consumer
 type Consumer struct {
-    // TODO: Define connection details to MyKafka broker
+	ID string
 }
 
 // NewConsumer initializes a new consumer instance
-func NewConsumer(/* parameters */) *Consumer {
-    // TODO: Set up consumer with necessary configuration
-    return &Consumer{}
+func NewConsumer(id string) *Consumer {
+	return &Consumer{ID: id}
 }
 
 // Receive retrieves a message from the broker
 func (c *Consumer) Receive() (string, error) {
-    // TODO: Implement message receiving logic
-    return "", nil
+	myKafka := GetBrokerInstance()
+	consume, err := myKafka.Consume(c.ID)
+	if err != nil {
+		return "", err
+	}
+	return consume.Content, nil
 }
