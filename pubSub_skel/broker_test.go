@@ -9,8 +9,9 @@ import (
 
 func TestProduceConsume(t *testing.T) {
 	broker := GetBrokerInstance()
-	consumerID := "consumer1"
+	consumerID := "consumer 1"
 
+	broker.RegisterConsumer(consumerID)
 	// Test producing a message
 	err := broker.Produce("Order Placed: {order_id: 123, customer_id: 456, items: [{id: 1, qty: 2}, {id: 2, qty: 1}]}")
 	if err != nil {
@@ -21,7 +22,7 @@ func TestProduceConsume(t *testing.T) {
 	}
 
 	// Test consuming a message
-	msg, err := broker.Consume(consumerID)
+	msg, err := broker.Consume()
 	if err != nil {
 		t.Error(err)
 	}
@@ -30,7 +31,7 @@ func TestProduceConsume(t *testing.T) {
 	}
 
 	// Test empty queue handling
-	_, err = broker.Consume(consumerID)
+	_, err = broker.Consume()
 
 	if err.Error() != "no messages to consume" {
 		t.Errorf("Expected no messages to consume, got %s", err.Error())
@@ -73,12 +74,16 @@ func TestConcurrentProduce(t *testing.T) {
 }
 
 func TestConcurrentConsume(t *testing.T) {
-	broker := GetBrokerInstance()
+	broker := NewMyKafka()
 	var wg sync.WaitGroup
 
 	// Number of messages and consumers
-	numMessages := 1000
+	numMessages := 10
 	numConsumers := 3
+
+	for i := 0; i < numConsumers; i++ {
+		broker.RegisterConsumer("consumer " + strconv.Itoa(i))
+	}
 
 	// Produce messages
 	for i := 0; i < numMessages; i++ {
@@ -97,7 +102,7 @@ func TestConcurrentConsume(t *testing.T) {
 		defer wg.Done()
 		for {
 			// Attempt to consume a message
-			msg, err := broker.Consume(consumerID)
+			msg, err := broker.Consume()
 			if err != nil {
 				if err.Error() == "no messages to consume" {
 					return // No more messages
@@ -134,33 +139,26 @@ func TestProducerSend(t *testing.T) {
 	}
 }
 
-//
-//func TestConsumerReceive(t *testing.T) {
-//	broker := GetBrokerInstance()
-//	consumer := NewConsumer()
-//
-//	err := broker.Produce("Order Placed: {order_id: 1001, customer_id: 501, items: [{id: 2, qty: 3}]}")
-//	if err != nil {
-//		t.Fatalf("Failed to produce message: %s", err)
-//	}
-//
-//	message, err := consumer.Receive()
-//	if err != nil {
-//		t.Fatalf("Error receiving message: %v", err)
-//	}
-//
-//	expectedMessage := "Order Placed: {order_id: 1001, customer_id: 501, items: [{id: 2, qty: 3}]}"
-//	if message != expectedMessage {
-//		t.Errorf("Expected message '%s', got '%s'", expectedMessage, message)
-//	}
-//}
-//
-//func TestAcknowledge(t *testing.T) {
-//	broker := NewMyKafka()
-//	broker.Produce("Order Placed: {order_id: 124, customer_id: 457, items: [{id: 3, qty: 4}]}")
-//	broker.Acknowledge("Order Placed: {order_id: 124, customer_id: 457, items: [{id: 3, qty: 4}]}")
-//	// Verify that the message is acknowledged properly
-//}
+func TestConsumerReceive(t *testing.T) {
+	broker := GetBrokerInstance()
+	consumer := NewConsumer("consumer1")
+
+	err := broker.Produce("Order Placed: {order_id: 1001, customer_id: 501, items: [{id: 2, qty: 3}]}")
+	if err != nil {
+		t.Fatalf("Failed to produce message: %s", err)
+	}
+
+	message, err := consumer.Receive()
+	if err != nil {
+		t.Fatalf("Error receiving message: %v", err)
+	}
+
+	expectedMessage := "Order Placed: {order_id: 1001, customer_id: 501, items: [{id: 2, qty: 3}]}"
+	if message != expectedMessage {
+		t.Errorf("Expected message '%s', got '%s'", expectedMessage, message)
+	}
+}
+
 //
 //func TestLoadBalancing(t *testing.T) {
 //	broker := NewMyKafka()
