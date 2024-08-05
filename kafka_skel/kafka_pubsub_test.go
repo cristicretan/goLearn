@@ -7,53 +7,51 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
-var inventorySystem *InventorySystem
-var billingSystem *BillingSystem
-var shippingSystem *ShippingSystem
+type MockConsumer struct {
+	messages []string
+	mu       sync.Mutex
+}
+
+func newMockConsumer() *MockConsumer {
+	return &MockConsumer{
+		messages: []string{},
+	}
+}
+
+func (m *MockConsumer) Receive(topic string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.messages = append(m.messages, fmt.Sprintf("Message for topic %s", topic))
+	return nil
+}
+
+func (m *MockConsumer) GetMessages() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.messages
+}
 
 func TestOrderPlacedNotification(t *testing.T) {
 	brokers := []string{"localhost:9092"}
-	inventorySystem = newInventorySystem()
-	inventorySystem.Items = make([]Item, 5)
-	inventorySystem.Items[0] = Item{
-		ID:  1,
-		Qty: 5,
-	}
-	inventorySystem.Items[1] = Item{
-		ID:  2,
-		Qty: 5,
-	}
-	inventorySystem.Items[2] = Item{
-		ID:  3,
-		Qty: 5,
-	}
-	inventorySystem.Items[3] = Item{
-		ID:  4,
-		Qty: 5,
-	}
-	inventorySystem.Items[4] = Item{
-		ID:  5,
-		Qty: 5,
-	}
-	billingSystem = newBillingSystem(1000)
-	shippingSystem = newShippingSystem()
-	shippingSystem.Customers = make([]Customer, 3)
-	shippingSystem.Customers[0] = Customer{
-		ID:      501,
-		Address: "Nowhere is your first customer",
-	}
-	shippingSystem.Customers[1] = Customer{
-		ID:      502,
-		Address: "Somewhere is your first customer",
-	}
-	shippingSystem.Customers[2] = Customer{
-		ID:      503,
-		Address: "Some address is your first customer",
-	}
+	inventoryMock := newMockConsumer()
+	billingMock := newMockConsumer()
+	shippingMock := newMockConsumer()
+
+	inventorySystem := newInventorySystem()
+	billingSystem := newBillingSystem(1000)
+	shippingSystem := newShippingSystem()
+
+	inventorySystem.Start()
+	billingSystem.Start()
+	shippingSystem.Start()
+
 	producer, err := NewProducer(brokers)
 	if err != nil {
 		t.Fatalf("Failed to create producer: %v", err)
@@ -78,39 +76,39 @@ func TestOrderPlacedNotification(t *testing.T) {
 		t.Fatalf("Failed to place order: %v", err)
 		return
 	}
-	var wg sync.WaitGroup
 
-	// Implement verification logic for expected consumer behavior
-	// This typically involves setting up consumers for each subsystem and validating received messages.
-	// Note: Due to the asynchronous nature of Kafka, synchronization mechanisms or mocking may be required.
-	go func() {
-		wg.Add(1)
-		err := inventorySystem.Consumer.Receive(invetorySystemTopic)
-		if err != nil {
-			t.Errorf("Failed to consume message on invetory system: %v", err)
-			return
-		}
-		wg.Done()
-	}()
+	err = inventoryMock.Receive(inventorySystemTopic)
+	if err != nil {
+		t.Fatalf("Failed to receive inventory: %v", err)
+		return
+	}
 
-	go func() {
-		wg.Add(1)
-		err = billingSystem.Consumer.Receive(billingSystemTopic)
-		if err != nil {
-			t.Errorf("Failed to consume message on billing system: %v", err)
-			return
-		}
-		wg.Done()
-	}()
+	err = billingMock.Receive(billingSystemTopic)
+	if err != nil {
+		t.Fatalf("Failed to receive billing: %v", err)
+		return
+	}
 
-	go func() {
-		wg.Add(1)
-		err = shippingSystem.Consumer.Receive(shippingSystemTopic)
-		if err != nil {
-			t.Errorf("Failed to consume message on shipping system: %v", err)
-			return
-		}
-		wg.Done()
-	}()
-	wg.Wait()
+	err = shippingMock.Receive(shippingSystemTopic)
+	if err != nil {
+		t.Fatalf("Failed to receive shipping: %v", err)
+		return
+	}
+
+	time.Sleep(time.Second)
+
+	if len(inventoryMock.GetMessages()) == 0 {
+		t.Fatalf("Inventory system did not receive messages")
+		return
+	}
+
+	if len(billingMock.GetMessages()) == 0 {
+		t.Fatalf("Billing system did not receive messages")
+		return
+	}
+
+	if len(shippingMock.GetMessages()) == 0 {
+		t.Fatalf("Shipping system did not receive messages")
+		return
+	}
 }

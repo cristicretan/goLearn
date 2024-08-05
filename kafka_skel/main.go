@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	invetorySystemTopic = "invetory-system"
-	billingSystemTopic  = "billing-system"
-	shippingSystemTopic = "shipping-system"
+	inventorySystemTopic = "inventory-system"
+	billingSystemTopic   = "billing-system"
+	shippingSystemTopic  = "shipping-system"
 )
 
 type Item struct {
@@ -51,6 +51,17 @@ func newInventorySystem() *InventorySystem {
 	}
 }
 
+func (s *InventorySystem) Start() {
+	go func() {
+		for {
+			err := s.Consumer.Receive(inventorySystemTopic)
+			if err != nil {
+				log.Printf("Error consuming message in invetory system: %v", err)
+			}
+		}
+	}()
+}
+
 type BillingSystem struct {
 	Balance  float64
 	Consumer *Consumer
@@ -65,6 +76,17 @@ func newBillingSystem(balance float64) *BillingSystem {
 		Balance:  balance,
 		Consumer: consumer,
 	}
+}
+
+func (s *BillingSystem) Start() {
+	go func() {
+		for {
+			err := s.Consumer.Receive(billingSystemTopic)
+			if err != nil {
+				log.Printf("Error consuming message in billing system: %v", err)
+			}
+		}
+	}()
 }
 
 type Customer struct {
@@ -88,8 +110,19 @@ func newShippingSystem() *ShippingSystem {
 	}
 }
 
+func (s *ShippingSystem) Start() {
+	go func() {
+		for {
+			err := s.Consumer.Receive(shippingSystemTopic)
+			if err != nil {
+				log.Printf("Error consuming message in shipping system: %v", err)
+			}
+		}
+	}()
+}
+
 func placeOrder(producer *Producer, order Order) error {
-	err := producer.Send(invetorySystemTopic, order.String())
+	err := producer.Send(inventorySystemTopic, order.String())
 	if err != nil {
 		log.Fatalf("Error placing order in invetory system: %v", err)
 		return err
@@ -108,28 +141,13 @@ func placeOrder(producer *Producer, order Order) error {
 }
 
 func main() {
-	producer, err := NewProducer(brokers)
-	if err != nil {
-		log.Fatalf("Failed to create producer: %v", err)
-	}
+	inventorySystem := newInventorySystem()
+	billingSystem := newBillingSystem(1000)
+	shippingSystem := newShippingSystem()
 
-	err = producer.Send(topic, "Hello, Kafka!")
-	if err != nil {
-		log.Fatalf("Failed to send message: %v", err)
-	}
-	log.Printf("Message sent to topic %s", topic)
-
-	consumer, err := NewConsumer(brokers)
-	if err != nil {
-		log.Fatalf("Failed to create consumer: %v", err)
-	}
-
-	go func() {
-		err = consumer.Receive(topic)
-		if err != nil {
-			log.Fatalf("Failed to receive message: %v", err)
-		}
-	}()
+	inventorySystem.Start()
+	billingSystem.Start()
+	shippingSystem.Start()
 
 	time.Sleep(time.Second * 10)
 }
